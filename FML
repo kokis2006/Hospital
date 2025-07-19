@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FML</title>
+    <title>Farmacia Moderna Lety</title>
     <style>
         * {
             margin: 0;
@@ -216,6 +216,22 @@
             margin-bottom: 20px;
         }
 
+        .turn-info {
+            background: #e8f5e8;
+            border: 2px solid #4facfe;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 15px 0;
+            text-align: center;
+        }
+
+        .turn-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #4facfe;
+            margin: 10px 0;
+        }
+
         @media (max-width: 768px) {
             .role-selector {
                 flex-direction: column;
@@ -226,8 +242,9 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🏥 Sistema de Registro Médico</h1>
+            <h1>🏥 Farmacia Moderna Lety</h1>
             <p>Sistema multi-rol para registro y gestión de pacientes</p>
+            <small>Turnos desde las 7:00 AM - 20 minutos por consulta</small>
         </div>
 
         <div class="role-selector">
@@ -246,7 +263,8 @@
         <div id="patient-section" class="content-section">
             <h2>📝 Registro de Paciente</h2>
             <div class="instructions">
-                <strong>Instrucciones:</strong> Complete el formulario con sus datos. Su información será registrada de forma segura.
+                <strong>Instrucciones:</strong> Complete el formulario con sus datos. Su información será registrada de forma segura y se le asignará un turno automáticamente.
+                <br><strong>Horarios:</strong> Los turnos inician a las 7:00 AM y duran 20 minutos cada uno.
             </div>
             
             <form id="patientForm">
@@ -288,7 +306,7 @@
 
             <div id="staff-content" style="display: none;">
                 <div class="instructions">
-                    <strong>Personal autorizado:</strong> Registre pacientes durante las consultas o citas.
+                    <strong>Personal autorizado:</strong> Registre pacientes durante las consultas o citas. Los turnos se asignan automáticamente iniciando a las 7:00 AM.
                 </div>
                 
                 <form id="staffForm">
@@ -381,10 +399,10 @@
         // Base de datos en memoria
         let patientDatabase = [];
         const DOCTOR_PASSWORD = "Consulta150"; // Cambia esta contraseña
-        const STAFF_PASSWORD = "Son1970ia"; // Nueva contraseña para personal médico
+        const STAFF_PASSWORD = "Son1970ia"; // Contraseña para personal médico
         const CONSULTATION_DURATION = 20; // Minutos por consulta
-        const START_HOUR = 9; // Hora de inicio (9 AM)
-        const END_HOUR = 17; // Hora de fin (5 PM)
+        const START_HOUR = 7; // Hora de inicio (7:00 AM)
+        const END_HOUR = 17; // Hora de fin (5:00 PM)
 
         // Cargar datos al iniciar
         loadData();
@@ -399,29 +417,31 @@
         }
 
         function calculateConsultationTime(turnNumber) {
-            const now = new Date();
-            const consultationDate = new Date();
+            // Calcular la hora de consulta basada en el número de turno
+            // Turno 1: 7:00, Turno 2: 7:20, Turno 3: 7:40, etc.
+            const minutesFromStart = (turnNumber - 1) * CONSULTATION_DURATION;
+            const consultationHour = START_HOUR + Math.floor(minutesFromStart / 60);
+            const consultationMinutes = minutesFromStart % 60;
             
-            // Si es muy tarde, programar para el día siguiente
-            if (now.getHours() >= END_HOUR) {
+            // Crear objeto de fecha para la consulta
+            const consultationDate = new Date();
+            consultationDate.setHours(consultationHour, consultationMinutes, 0, 0);
+            
+            // Si la hora calculada pasa del horario de trabajo, mover al siguiente día
+            if (consultationHour >= END_HOUR) {
                 consultationDate.setDate(consultationDate.getDate() + 1);
-                consultationDate.setHours(START_HOUR, 0, 0, 0);
-            } else {
-                // Calcular tiempo basado en el número de turno
-                const minutesFromStart = (turnNumber - 1) * CONSULTATION_DURATION;
-                consultationDate.setHours(START_HOUR, minutesFromStart, 0, 0);
-                
-                // Si la hora calculada es anterior a ahora, usar la hora actual + buffer
-                if (consultationDate < now) {
-                    consultationDate.setTime(now.getTime() + (CONSULTATION_DURATION * 60 * 1000));
-                }
+                const newMinutesFromStart = (turnNumber - 1 - Math.floor((END_HOUR - START_HOUR) * 60 / CONSULTATION_DURATION)) * CONSULTATION_DURATION;
+                consultationDate.setHours(START_HOUR + Math.floor(newMinutesFromStart / 60), newMinutesFromStart % 60, 0, 0);
             }
             
-            return consultationDate.toLocaleTimeString('es-MX', {
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: true
-            });
+            return {
+                time: consultationDate.toLocaleTimeString('es-MX', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                }),
+                date: consultationDate.toLocaleDateString('es-MX')
+            };
         }
 
         // Selección de rol
@@ -463,7 +483,7 @@
             e.preventDefault();
             
             const turnNumber = getNextTurnNumber();
-            const estimatedTime = calculateConsultationTime(turnNumber);
+            const consultationInfo = calculateConsultationTime(turnNumber);
             
             const patient = {
                 id: Date.now(),
@@ -471,7 +491,8 @@
                 name: document.getElementById('patientName').value.trim(),
                 motivo: document.getElementById('patientMotivo').value.trim(),
                 priority: document.getElementById('patientPriority').value,
-                estimatedTime: estimatedTime,
+                consultationTime: consultationInfo.time,
+                consultationDate: consultationInfo.date,
                 registeredBy: 'Paciente',
                 date: new Date().toISOString(),
                 displayDate: new Date().toLocaleDateString('es-MX', {
@@ -490,10 +511,14 @@
             // Mostrar información del turno
             const turnInfo = document.getElementById('turnInfo');
             turnInfo.innerHTML = `
-                <h3>🎫 ¡Registro Exitoso!</h3>
-                <p><strong>Su número de turno:</strong> <span style="font-size: 1.5em; color: #4facfe; font-weight: bold;">#${turnNumber}</span></p>
-                <p><strong>Hora estimada de consulta:</strong> <span style="color: #4facfe; font-weight: bold;">${estimatedTime}</span></p>
-                <p><em>Por favor llegue 10 minutos antes de su hora estimada.</em></p>
+                <div class="turn-info">
+                    <h3>🎫 ¡Registro Exitoso!</h3>
+                    <div class="turn-number">Turno #${turnNumber}</div>
+                    <p><strong>📅 Fecha:</strong> ${consultationInfo.date}</p>
+                    <p><strong>🕐 Hora de consulta:</strong> <span style="color: #4facfe; font-weight: bold; font-size: 1.2em;">${consultationInfo.time}</span></p>
+                    <p><strong>⏱️ Duración:</strong> 20 minutos</p>
+                    <p><em>Por favor llegue 10 minutos antes de su hora asignada.</em></p>
+                </div>
             `;
             showSuccess('patientSuccess');
         });
@@ -503,7 +528,7 @@
             e.preventDefault();
             
             const turnNumber = getNextTurnNumber();
-            const estimatedTime = calculateConsultationTime(turnNumber);
+            const consultationInfo = calculateConsultationTime(turnNumber);
             
             const patient = {
                 id: Date.now(),
@@ -512,7 +537,8 @@
                 phone: document.getElementById('staffPhone').value.trim(),
                 motivo: document.getElementById('staffMotivo').value.trim(),
                 priority: document.getElementById('staffPriority').value,
-                estimatedTime: estimatedTime,
+                consultationTime: consultationInfo.time,
+                consultationDate: consultationInfo.date,
                 notes: document.getElementById('staffNotes').value.trim(),
                 registeredBy: 'Personal Médico',
                 date: new Date().toISOString(),
@@ -532,8 +558,12 @@
             // Mostrar información del turno para el staff
             const staffTurnInfo = document.getElementById('staffTurnInfo');
             staffTurnInfo.innerHTML = `
-                <strong>Paciente registrado:</strong> ${patient.name}<br>
-                <strong>Turno #${turnNumber}</strong> - Hora estimada: <strong>${estimatedTime}</strong>
+                <div class="turn-info">
+                    <strong>✅ Paciente registrado:</strong> ${patient.name}<br>
+                    <strong>🎫 Turno #${turnNumber}</strong><br>
+                    <strong>📅 Fecha:</strong> ${consultationInfo.date}<br>
+                    <strong>🕐 Hora:</strong> <span style="color: #4facfe; font-weight: bold;">${consultationInfo.time}</span>
+                </div>
             `;
             showSuccess('staffSuccess');
         });
@@ -602,16 +632,20 @@
                 return;
             }
 
+            // Ordenar por número de turno
+            filtered.sort((a, b) => a.turnNumber - b.turnNumber);
+
             container.innerHTML = filtered.map(patient => `
                 <div class="record-item">
-                    <div class="patient-name">${escapeHtml(patient.name)}</div>
-                    <div class="record-date">${patient.displayDate} | Registrado por: ${patient.registeredBy}</div>
-                    <div><strong>Teléfono:</strong> ${patient.phone || 'No proporcionado'}</div>
-                    <div><strong>Email:</strong> ${patient.email || 'No proporcionado'}</div>
-                    <div><strong>Prioridad:</strong> ${getPriorityIcon(patient.priority)} ${patient.priority}</div>
-                    <div><strong>Motivo:</strong> ${escapeHtml(patient.motivo)}</div>
-                    ${patient.notes ? `<div><strong>Notas:</strong> ${escapeHtml(patient.notes)}</div>` : ''}
-                    <button onclick="deleteRecord(${patient.id})" style="background: #ff4757; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; margin-top: 10px;">Eliminar</button>
+                    <div class="patient-name">🎫 Turno #${patient.turnNumber} - ${escapeHtml(patient.name)}</div>
+                    <div class="record-date">Registrado: ${patient.displayDate} | Por: ${patient.registeredBy}</div>
+                    <div><strong>📅 Fecha consulta:</strong> ${patient.consultationDate}</div>
+                    <div><strong>🕐 Hora consulta:</strong> <span style="color: #4facfe; font-weight: bold;">${patient.consultationTime}</span> (20 min)</div>
+                    <div><strong>📱 Teléfono:</strong> ${patient.phone || 'No proporcionado'}</div>
+                    <div><strong>⚡ Prioridad:</strong> ${getPriorityIcon(patient.priority)} ${patient.priority}</div>
+                    <div><strong>📋 Motivo:</strong> ${escapeHtml(patient.motivo)}</div>
+                    ${patient.notes ? `<div><strong>📝 Notas:</strong> ${escapeHtml(patient.notes)}</div>` : ''}
+                    <button onclick="deleteRecord(${patient.id})" style="background: #ff4757; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; margin-top: 10px;">❌ Eliminar</button>
                 </div>
             `).join('');
         }
@@ -630,13 +664,15 @@
         }
 
         function exportToCSV() {
-            const headers = ['Nombre', 'Teléfono', 'Email', 'Motivo', 'Prioridad', 'Registrado por', 'Fecha'];
+            const headers = ['Turno', 'Nombre', 'Fecha Consulta', 'Hora Consulta', 'Teléfono', 'Motivo', 'Prioridad', 'Registrado por', 'Fecha Registro'];
             const csvContent = [
                 headers.join(','),
                 ...patientDatabase.map(p => [
+                    p.turnNumber,
                     `"${p.name}"`,
+                    p.consultationDate,
+                    p.consultationTime,
                     `"${p.phone || ''}"`,
-                    `"${p.email || ''}"`,
                     `"${p.motivo}"`,
                     p.priority,
                     p.registeredBy,
@@ -673,7 +709,7 @@
             element.style.display = 'block';
             setTimeout(() => {
                 element.style.display = 'none';
-            }, 3000);
+            }, 5000); // Mostrar por 5 segundos para que se pueda leer bien la información del turno
         }
 
         function hideSuccess(elementId) {
